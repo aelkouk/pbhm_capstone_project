@@ -89,22 +89,33 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     
     df = pd.read_csv(fname) # read in pandas dataframe 
     
-    def SHcalc(t,pa,rh):
-        #compute Specific humidity
-        #equation taken from here: 
-        # https://earthscience.stackexchange.com/questions/5076/how-to-calculate-specific-humidity-with-relative-humidity-temperature-and-pres
-        T0 = 273.15
-        Rv = 461 
-        Rd = 287
-        e0 = 0.6113
-        Lv = 2.5e6
-        T = t+273.15
-        es = e0 * np.exp((Lv/Rv) * ((1/T0)-(1/T))) #saturation vapor pressure
-        RH = rh/100 # fractional relative humidity 
+    # def SHcalc(t,pa,rh):
+    #     #compute Specific humidity
+    #     #equation taken from here: 
+    #     # https://earthscience.stackexchange.com/questions/5076/how-to-calculate-specific-humidity-with-relative-humidity-temperature-and-pres
+    #     T0 = 273.15
+    #     Rv = 461 
+    #     Rd = 287
+    #     es0 = 0.6113
+    #     Lv = 2.5e6
+    #     T = t+273.15
+    #     es = es0 * np.exp((Lv/Rv) * ((1/T0)-(1/T))) #saturation vapor pressure
+    #     RH = rh/100 # fractional relative humidity 
+    #     p = pa*100 # transfer hPa into Pa
+    #     e = es*RH
+    #     w = (e*Rd)/(Rv*(p-e))
+    #     q = w/(w+1)
+    #     return q 
+    
+    def SHcalc(temp,pa,rh):
+        #from https://cran.r-project.org/web/packages/humidity/vignettes/humidity-measures.html 
+        Tdp = (temp - ((100-rh)/5))+273.15 # dew point (approx) in kelvin
         p = pa*100 # transfer hPa into Pa
-        e = es*RH
-        w = (e*Rd)/(Rv*(p-e))
-        q = w/(w+1)
+        a = 17.2693882
+        b = 35.86
+        tmp = (a*(Tdp-273.16))/(Tdp-b)
+        e = 6.1078*np.exp(tmp)
+        q = 0.622/(p - (0.378*e))
         return q 
     
     #'fix' data by interpolating missing values 
@@ -133,8 +144,10 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     tstep = abs(tdelta.seconds) 
     
     sh = SHcalc(df['TA'].values, # compute sensitive humidity 
-                df['PRECIP'].values,
+                df['PA'].values,
                 df['RH'].values)
+    
+    # sh[sh<-1] = -0.99
     
     # weather arrays, arrays which are nsteps and nhru in dimensions 
     # (assumes fluxes are valid across the catchment)    
@@ -155,7 +168,7 @@ def cosmos2nc(fname, lat, long, elev, nhru):
         airpres[:,i] = df['PA'].values * 100 #Pa
         windspd[:,i] = df['WS'].values # m/s
         
-    data = {'data_step':tstep,
+    data = {'data_step':float(tstep),
             'lat':(('hru'),lat),
             'lon':(('hru'),long),
             'hruId':(('hru'),hru),
@@ -197,7 +210,7 @@ def attributes2nc(data):
     
     columns = ['hruId',
                'gruId',          
-               'hru2gruId'       
+               'hru2gruId',       
                'downHRUindex',    
                'longitude',      
                'latitude',       
@@ -212,6 +225,7 @@ def attributes2nc(data):
   
     missing = []
     for c in columns:
+        # print(c)
         if c not in data.keys():
             missing.append(c)
     
@@ -312,9 +326,9 @@ def initCond2nc(data={}, nhru=1):
                 'scalarCanopyTemp'    :286,
                 'mLayerMatricHead'    :-1,
                 'iLayerHeight'        :layerHeight,
-                'mLayerTemp'          :274,
+                'mLayerTemp'          :273,
                 'mLayerVolFracLiq'    :0.5,
-                'mLayerVolFracIce'    :0,
+                'mLayerVolFracIce'    :0.1,
                 'mLayerDepth'         :layerDepth,
                 'dt_init'             :1800,
                 'nSnow'               :1,
