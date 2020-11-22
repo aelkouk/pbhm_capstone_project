@@ -19,7 +19,7 @@ log_file=${base_path}/perturb_param/log_summa.txt
 sobol_path=${base_path}/perturb_param/SobolPAR_Matrix
 sobol_files=( SobolPAR_MatrixA.csv  SobolPAR_MatrixC1.csv  SobolPAR_MatrixC3.csv SobolPAR_MatrixB.csv  SobolPAR_MatrixC2.csv  SobolPAR_MatrixC4.csv )
 taskid=$SLURM_ARRAY_TASK_ID
-sobol_file=sobol_path/${sobol_files[$taskid-1]}
+sobol_file=$sobol_path/${sobol_files[$taskid-1]}
 
 for row in {1..100}; do
         # Run script chnage SOILTBL using $row value in SobolPAR_Matrix.csv file
@@ -29,7 +29,7 @@ for row in {1..100}; do
         # matlab code 2
         matlab -batch "change_param_all($row,'$sobol_file','$SOILPARM_file')"
         # Run summa with $row as output suffix
-        summa_command="$summa_exe -m $summa_settings --suffix $row_$taskid"
+        summa_command="$summa_exe -m $summa_settings --suffix $row-$taskid"
 
         # Run as [SUMMA call] > [log file path]
 	$summa_command >> $log_file
