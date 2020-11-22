@@ -3,6 +3,7 @@
 #SBATCH --job-name=test
 #SBATCH --ntasks=1
 #SBATCH --time=0-01:59:00
+#SBATCH --mem=8G
 
 # load the matlab module for running the 'change_param.m' function
 module load matlab/2020a
