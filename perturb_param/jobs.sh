@@ -17,7 +17,7 @@ log_file=${base_path}/perturb_param/log_summa.txt
 
 
 sobol_path=${base_path}/perturb_param/SobolPAR_Matrix
-sobol_files=( SobolPAR_MatrixA.csv  SobolPAR_MatrixC1.csv  SobolPAR_MatrixC3.csv SobolPAR_MatrixB.csv  SobolPAR_MatrixC2.csv  SobolPAR_MatrixC4.csv )
+sobol_files=( SobolPAR_LH_MatrixA.csv  SobolPAR_LH_MatrixC1.csv  SobolPAR_LH_MatrixC3.csv SobolPAR_LH_MatrixB.csv  SobolPAR_LH_MatrixC2.csv  SobolPAR_LH_MatrixC4.csv )
 taskid=$SLURM_ARRAY_TASK_ID
 sobol_file=$sobol_path/${sobol_files[$taskid-1]}
 
