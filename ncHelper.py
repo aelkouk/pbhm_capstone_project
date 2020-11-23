@@ -89,34 +89,34 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     
     df = pd.read_csv(fname) # read in pandas dataframe 
     
-    def SHcalc(t,pa,rh):
-        #compute Specific humidity
-        #equation taken from here: 
-        # https://earthscience.stackexchange.com/questions/5076/how-to-calculate-specific-humidity-with-relative-humidity-temperature-and-pres
-        T0 = 273.15
-        Rv = 461 
-        Rd = 287
-        es0 = 0.6113
-        Lv = 2.5e6
-        T = t+273.15
-        es = es0 * np.exp((Lv/Rv) * ((1/T0)-(1/T))) #saturation vapor pressure
-        RH = rh/100 # fractional relative humidity 
-        p = pa*100 # transfer hPa into Pa
-        e = es*RH
-        w = (e*Rd)/(Rv*(p-e))
-        q = w/(w+1)
-        return q 
-    
-    # def SHcalc(temp,pa,rh):
-    #     #from https://cran.r-project.org/web/packages/humidity/vignettes/humidity-measures.html 
-    #     Tdp = (temp - ((100-rh)/5))+273.16 # dew point (approx) in kelvin
+    # def SHcalc(t,pa,rh):
+    #     #compute Specific humidity
+    #     #equation taken from here: 
+    #     # https://earthscience.stackexchange.com/questions/5076/how-to-calculate-specific-humidity-with-relative-humidity-temperature-and-pres
+    #     T0 = 273.15
+    #     Rv = 461 
+    #     Rd = 287
+    #     es0 = 0.6113
+    #     Lv = 2.5e6
+    #     T = t+273.15
+    #     es = es0 * np.exp((Lv/Rv) * ((1/T0)-(1/T))) #saturation vapor pressure
+    #     RH = rh/100 # fractional relative humidity 
     #     p = pa*100 # transfer hPa into Pa
-    #     a = 17.2693882
-    #     b = 35.86
-    #     tmp = (a*(Tdp-273.16))/(Tdp-b)
-    #     e = 6.1078*np.exp(tmp)
-    #     q = 0.622/(p - (0.378*e))
-    #     return q
+    #     e = es*RH
+    #     w = (e*Rd)/(Rv*(p-e))
+    #     q = w/(w+1)
+    #     return q 
+    
+    def SHcalc(temp,pa,rh):
+        #from https://cran.r-project.org/web/packages/humidity/vignettes/humidity-measures.html 
+        Tdp = (temp - ((100-rh)/5))+273.16 # dew point (approx) in kelvin
+        p = pa*100 # transfer hPa into Pa
+        a = 17.2693882
+        b = 35.86
+        tmp = (a*(Tdp-273.16))/(Tdp-b)
+        e = 6.1078*np.exp(tmp)
+        q = 0.622/(p - (0.378*e))
+        return q
     
     #'fix' data by interpolating missing values 
     columns = ['PRECIP','TA','SWIN','LWIN','Q','RH','PA','WS']
@@ -323,17 +323,17 @@ def initCond2nc(data={}, nhru=1):
     #setup default values (feel free to edit this)
     defaults = {'scalarCanopyLiq'     :0,
                 'scalarCanairTemp'    :286,
-                'scalarSnowAlbedo'    :0,
+                'scalarSnowAlbedo'    :0.16,
                 'scalarSnowDepth'     :0,
                 'scalarCanopyIce'     :0,
                 'scalarSfcMeltPond'   :0,
-                'scalarAquiferStorage':1,
+                'scalarAquiferStorage':0,
                 'scalarSWE'           :0,
                 'scalarCanopyTemp'    :286,
                 'mLayerMatricHead'    :-1,
                 'iLayerHeight'        :layerHeight,
                 'mLayerTemp'          :273,
-                'mLayerVolFracLiq'    :0.5,
+                'mLayerVolFracLiq'    :1,
                 'mLayerVolFracIce'    :0.1,
                 'mLayerDepth'         :layerDepth,
                 'dt_init'             :1800,
@@ -417,8 +417,8 @@ def emptyTrailParam(nhru=1):
     
 #%% uk landcover to usgs table lookup 
 # lookup = {'Deciduous woodland':(1,11)}
-lookup = {'1':11,#Deciduous woodland
-          '2':13,#Coniferous woodland
+lookup = {'1':13,#Deciduous woodland
+          '2':11,#Coniferous woodland
           '3':4,
           '4':5,
           '5':7,
