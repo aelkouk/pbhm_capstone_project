@@ -89,34 +89,34 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     
     df = pd.read_csv(fname) # read in pandas dataframe 
     
-    # def SHcalc(t,pa,rh):
-    #     #compute Specific humidity
-    #     #equation taken from here: 
-    #     # https://earthscience.stackexchange.com/questions/5076/how-to-calculate-specific-humidity-with-relative-humidity-temperature-and-pres
-    #     T0 = 273.15
-    #     Rv = 461 
-    #     Rd = 287
-    #     es0 = 0.6113
-    #     Lv = 2.5e6
-    #     T = t+273.15
-    #     es = es0 * np.exp((Lv/Rv) * ((1/T0)-(1/T))) #saturation vapor pressure
-    #     RH = rh/100 # fractional relative humidity 
-    #     p = pa*100 # transfer hPa into Pa
-    #     e = es*RH
-    #     w = (e*Rd)/(Rv*(p-e))
-    #     q = w/(w+1)
-    #     return q 
-    
-    def SHcalc(temp,pa,rh):
-        #from https://cran.r-project.org/web/packages/humidity/vignettes/humidity-measures.html 
-        Tdp = (temp - ((100-rh)/5))+273.15 # dew point (approx) in kelvin
+    def SHcalc(t,pa,rh):
+        #compute Specific humidity
+        #equation taken from here: 
+        # https://earthscience.stackexchange.com/questions/5076/how-to-calculate-specific-humidity-with-relative-humidity-temperature-and-pres
+        T0 = 273.15
+        Rv = 461 
+        Rd = 287
+        es0 = 0.6113
+        Lv = 2.5e6
+        T = t+273.15
+        es = es0 * np.exp((Lv/Rv) * ((1/T0)-(1/T))) #saturation vapor pressure
+        RH = rh/100 # fractional relative humidity 
         p = pa*100 # transfer hPa into Pa
-        a = 17.2693882
-        b = 35.86
-        tmp = (a*(Tdp-273.16))/(Tdp-b)
-        e = 6.1078*np.exp(tmp)
-        q = 0.622/(p - (0.378*e))
+        e = es*RH
+        w = (e*Rd)/(Rv*(p-e))
+        q = w/(w+1)
         return q 
+    
+    # def SHcalc(temp,pa,rh):
+    #     #from https://cran.r-project.org/web/packages/humidity/vignettes/humidity-measures.html 
+    #     Tdp = (temp - ((100-rh)/5))+273.16 # dew point (approx) in kelvin
+    #     p = pa*100 # transfer hPa into Pa
+    #     a = 17.2693882
+    #     b = 35.86
+    #     tmp = (a*(Tdp-273.16))/(Tdp-b)
+    #     e = 6.1078*np.exp(tmp)
+    #     q = 0.622/(p - (0.378*e))
+    #     return q
     
     #'fix' data by interpolating missing values 
     columns = ['PRECIP','TA','SWIN','LWIN','Q','RH','PA','WS']
@@ -146,8 +146,6 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     sh = SHcalc(df['TA'].values, # compute sensitive humidity 
                 df['PA'].values,
                 df['RH'].values)
-    
-    # sh[sh<-1] = -0.99
     
     # weather arrays, arrays which are nsteps and nhru in dimensions 
     # (assumes fluxes are valid across the catchment)    
@@ -278,7 +276,7 @@ def initCond2nc(data={}, nhru=1):
                'scalarSnowDepth', 'scalarCanopyIce', 'scalarSfcMeltPond', 
                'scalarAquiferStorage', 'scalarSWE', 'scalarCanopyTemp', 
                'mLayerMatricHead', 'iLayerHeight', 'mLayerTemp', 
-               'mLayerVolFracLiq', 'mLayerVolFracIce', 'mLayerDepth', 
+               'mLayerVolFracLiq', 'mLayerVolFracIce','mLayerDepth', 
                'dt_init', 'nSnow', 'nSoil'] #all the parameters needed by SUMMA 
     
     midTotoC = ['mLayerTemp','mLayerVolFracLiq','mLayerVolFracIce',
@@ -304,15 +302,23 @@ def initCond2nc(data={}, nhru=1):
         data['mLayerDepth'] = layerDepth
     else:
         layerDepth = data['mLayerDepth']
-    
-    if 'iLayerHeight' not in data.keys():
-        tmp = np.asarray([0, 0.025, 0.1, 0.25, 0.5, 1, 1.5, 2.5, 4])#m
-        layerHeight = np.zeros((len(tmp),nhru),dtype=float)
+        
+    if 'iLayerHeight' not in data.keys(): # calculate automatically 
+        nlayers = layerDepth.shape[0]+1
+        tmp = np.zeros(nlayers)
+        r = 0
+        for i in range(nlayers-1):
+            r += layerDepth[:,0][i]
+            tmp[i+1] = r 
+       # print(tmp)
+        layerHeight = np.zeros((nlayers,nhru),dtype=float)
         for i in range(nhru):
             layerHeight[:,i] = tmp
         data['iLayerHeight'] = layerHeight
     else:
         layerHeight = data['iLayerHeight']
+    
+
         
     #setup default values (feel free to edit this)
     defaults = {'scalarCanopyLiq'     :0,
@@ -331,8 +337,8 @@ def initCond2nc(data={}, nhru=1):
                 'mLayerVolFracIce'    :0.1,
                 'mLayerDepth'         :layerDepth,
                 'dt_init'             :1800,
-                'nSnow'               :1,
-                'nSoil'               :layerDepth.shape[0]-1}
+                'nSnow'               :0,
+                'nSoil'               :layerHeight.shape[0]}
             
     netc = {}
     for c in columns:
@@ -341,7 +347,7 @@ def initCond2nc(data={}, nhru=1):
         if c in midTotoC:
             dim = ('midToto', 'hru')
             d = 2
-            xdim = layerDepth.shape[0]
+            xdim = layerDepth.shape[0] 
         elif c in midSoilC:
             dim = ('midSoil', 'hru')
             d = 2
@@ -408,3 +414,27 @@ def emptyTrailParam(nhru=1):
     #         'dt_init'             :(('scalarv', 'hru'), val(30*60)),
     #         'nSnow'               :(('scalarv', 'hru'), val(1,dtype=int)),
     #         'nSoil'               :(('scalarv', 'hru'), val(7,dtype=int))}
+    
+#%% uk landcover to usgs table lookup 
+# lookup = {'Deciduous woodland':(1,11)}
+lookup = {'1':11,#Deciduous woodland
+          '2':13,#Coniferous woodland
+          '3':4,
+          '4':5,
+          '5':7,
+          '6':8,
+          '7':9,
+          '8':17,
+          '9':8,
+          '10':9,
+          '11':17,
+          '12':19,
+          '13':16,
+          '14':16}
+
+def UKCEH2NOAH(coverId):
+    out = [0]*len(coverId)
+    for i in range(len(coverId)):
+        li = str(int(coverId[i]))
+        out[i] = lookup[li]
+    return out 
