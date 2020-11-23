@@ -63,17 +63,19 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     running SUMMA. See here for further details:
     https://github.com/NCAR/summa/blob/master/docs/input_output/SUMMA_input.md
     
+    lat,long and elev inputs need to be as an array 
+    
     note: adapt this for generic weather data? 
 
     Parameters
     ----------
     fname : string
         Full path to cosmos weather file.
-    lat : float 
+    lat : ndarray  
         Latitude of cosmos station.
-    long : float 
+    long : ndarray 
         Longitude of cosmos station 
-    elev : float
+    elev : ndarray 
         Elevaion (mOAD) of cosmos station  
     nhru : int
         Number of HRUs in the study, we assume that fluxes are the same across 
