@@ -145,40 +145,32 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     tdelta = times[1] - times[0] # time delta object 
     tstep = abs(tdelta.seconds) 
     
-    sh = SHcalc(df['TA'].values, # compute sensitive humidity 
-                df['PA'].values,
-                df['RH'].values)
-    
-    # weather arrays, arrays which are nsteps and nhru in dimensions 
-    # (assumes fluxes are valid across the catchment)    
-    pptrate = np.zeros((len(times),len(hru)))
-    airtemp = np.zeros((len(times),len(hru)))
-    SWRadAtm  = np.zeros((len(times),len(hru)))
-    LWRadAtm = np.zeros((len(times),len(hru)))
-    spechum = np.zeros((len(times),len(hru)))
-    airpres = np.zeros((len(times),len(hru)))
-    windspd = np.zeros((len(times),len(hru)))
-    
-    for i in tqdm(range(len(hru)),ncols=100,desc='prepping'):
-        pptrate[:,i] = df['PRECIP'].values/tstep # precipiation rate in kg/m2/s
-        airtemp[:,i] = df['TA'].values + 273.15 #(temp in kelvin )
-        SWRadAtm[:,i] = df['SWIN'].values 
-        LWRadAtm[:,i] = df['LWIN'].values 
-        spechum[:,i] = sh
-        airpres[:,i] = df['PA'].values * 100 #Pa
-        windspd[:,i] = df['WS'].values # m/s
-        
+    #create object to store arrays 
     data = {'data_step':float(tstep),
             'lat':(('hru'),lat),
             'lon':(('hru'),long),
-            'hruId':(('hru'),hru),
-            'pptrate':(('time','hru'),pptrate),
-            'airtemp':(('time','hru'),airtemp),
-            'SWRadAtm':(('time','hru'),SWRadAtm),
-            'LWRadAtm':(('time','hru'),LWRadAtm),
-            'spechum':(('time','hru'),spechum),
-            'airpres':(('time','hru'),airpres),
-            'windspd':(('time','hru'),windspd)}
+            'hruId':(('hru'),hru)}
+    
+    # weather arrays, arrays which are nsteps and nhru in dimensions 
+    # (assumes fluxes are valid across the catchment)    
+    inputf = {'pptrate' : df['PRECIP'].values/tstep, # precipiation rate in kg/m2/s
+              'airtemp' : df['TA'].values + 273.15, #(temp in kelvin )
+              'SWRadAtm' : df['SWIN'].values ,
+              'LWRadAtm' : df['LWIN'].values, 
+              'spechum' : SHcalc(df['TA'].values, # compute sensitive humidity 
+                                 df['PA'].values,
+                                 df['RH'].values),
+              'airpres' : df['PA'].values * 100, #Pa
+              'windspd' : df['WS'].values} # m/s
+    
+    #expand to cover all HRUs (memory efficient way)
+    keys = list(inputf.keys())
+    for i in tqdm(range(len(keys)),ncols=100,desc='prepping'):
+        key = keys[i] 
+        tmp = np.zeros((len(times),len(hru)),order='F')
+        for j in range(len(hru)):
+            tmp[:,i] = inputf[key]
+        data[key] = (('time','hru'),tmp)
     
     weather = xr.Dataset(data,coords=coords) # xarray dataset 
     weather.assign_attrs({'Author':os.getlogin()})
@@ -419,8 +411,8 @@ def emptyTrailParam(nhru=1):
     
 #%% uk landcover to usgs table lookup 
 # lookup = {'Deciduous woodland':(1,11)}
-lookup = {'1':13,#Deciduous woodland
-          '2':11,#Coniferous woodland
+lookup = {'1':11,#Deciduous woodland
+          '2':13,#Coniferous woodland
           '3':4,
           '4':5,
           '5':7,
@@ -432,7 +424,14 @@ lookup = {'1':13,#Deciduous woodland
           '11':17,
           '12':19,
           '13':16,
-          '14':16}
+          '14':16,
+          '15':19,
+          '16':19,
+          '17':23,
+          '18':23,
+          '19':18,
+          '20':1,
+          '21':1}
 
 def UKCEH2NOAH(coverId):
     out = [0]*len(coverId)
