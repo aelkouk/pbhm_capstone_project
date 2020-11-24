@@ -169,7 +169,7 @@ def cosmos2nc(fname, lat, long, elev, nhru):
         key = keys[i] 
         tmp = np.zeros((len(times),len(hru)),order='F')
         for j in range(len(hru)):
-            tmp[:,i] = inputf[key]
+            tmp[:,j] = inputf[key]
         data[key] = (('time','hru'),tmp)
     
     weather = xr.Dataset(data,coords=coords) # xarray dataset 
@@ -327,7 +327,7 @@ def initCond2nc(data={}, nhru=1):
                 'mLayerMatricHead'    :-1,
                 'iLayerHeight'        :layerHeight,
                 'mLayerTemp'          :273,
-                'mLayerVolFracLiq'    :1,
+                'mLayerVolFracLiq'    :0.7,
                 'mLayerVolFracIce'    :0.1,
                 'mLayerDepth'         :layerDepth,
                 'dt_init'             :1800,
