@@ -63,17 +63,19 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     running SUMMA. See here for further details:
     https://github.com/NCAR/summa/blob/master/docs/input_output/SUMMA_input.md
     
+    lat,long and elev inputs need to be as an array 
+    
     note: adapt this for generic weather data? 
 
     Parameters
     ----------
     fname : string
         Full path to cosmos weather file.
-    lat : float 
+    lat : ndarray  
         Latitude of cosmos station.
-    long : float 
+    long : ndarray 
         Longitude of cosmos station 
-    elev : float
+    elev : ndarray 
         Elevaion (mOAD) of cosmos station  
     nhru : int
         Number of HRUs in the study, we assume that fluxes are the same across 
@@ -109,14 +111,14 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     
     def SHcalc(temp,pa,rh):
         #from https://cran.r-project.org/web/packages/humidity/vignettes/humidity-measures.html 
-        Tdp = (temp - ((100-rh)/5))+273.15 # dew point (approx) in kelvin
+        Tdp = (temp - ((100-rh)/5))+273.16 # dew point (approx) in kelvin
         p = pa*100 # transfer hPa into Pa
         a = 17.2693882
         b = 35.86
         tmp = (a*(Tdp-273.16))/(Tdp-b)
         e = 6.1078*np.exp(tmp)
         q = 0.622/(p - (0.378*e))
-        return q 
+        return q
     
     #'fix' data by interpolating missing values 
     columns = ['PRECIP','TA','SWIN','LWIN','Q','RH','PA','WS']
@@ -143,42 +145,32 @@ def cosmos2nc(fname, lat, long, elev, nhru):
     tdelta = times[1] - times[0] # time delta object 
     tstep = abs(tdelta.seconds) 
     
-    sh = SHcalc(df['TA'].values, # compute sensitive humidity 
-                df['PA'].values,
-                df['RH'].values)
-    
-    # sh[sh<-1] = -0.99
-    
-    # weather arrays, arrays which are nsteps and nhru in dimensions 
-    # (assumes fluxes are valid across the catchment)    
-    pptrate = np.zeros((len(times),len(hru)))
-    airtemp = np.zeros((len(times),len(hru)))
-    SWRadAtm  = np.zeros((len(times),len(hru)))
-    LWRadAtm = np.zeros((len(times),len(hru)))
-    spechum = np.zeros((len(times),len(hru)))
-    airpres = np.zeros((len(times),len(hru)))
-    windspd = np.zeros((len(times),len(hru)))
-    
-    for i in tqdm(range(len(hru)),ncols=100,desc='prepping'):
-        pptrate[:,i] = df['PRECIP'].values/tstep # precipiation rate in kg/m2/s
-        airtemp[:,i] = df['TA'].values + 273.15 #(temp in kelvin )
-        SWRadAtm[:,i] = df['SWIN'].values 
-        LWRadAtm[:,i] = df['LWIN'].values 
-        spechum[:,i] = sh
-        airpres[:,i] = df['PA'].values * 100 #Pa
-        windspd[:,i] = df['WS'].values # m/s
-        
+    #create object to store arrays 
     data = {'data_step':float(tstep),
             'lat':(('hru'),lat),
             'lon':(('hru'),long),
-            'hruId':(('hru'),hru),
-            'pptrate':(('time','hru'),pptrate),
-            'airtemp':(('time','hru'),airtemp),
-            'SWRadAtm':(('time','hru'),SWRadAtm),
-            'LWRadAtm':(('time','hru'),LWRadAtm),
-            'spechum':(('time','hru'),spechum),
-            'airpres':(('time','hru'),airpres),
-            'windspd':(('time','hru'),windspd)}
+            'hruId':(('hru'),hru)}
+    
+    # weather arrays, arrays which are nsteps and nhru in dimensions 
+    # (assumes fluxes are valid across the catchment)    
+    inputf = {'pptrate' : df['PRECIP'].values/tstep, # precipiation rate in kg/m2/s
+              'airtemp' : df['TA'].values + 273.15, #(temp in kelvin )
+              'SWRadAtm' : df['SWIN'].values ,
+              'LWRadAtm' : df['LWIN'].values, 
+              'spechum' : SHcalc(df['TA'].values, # compute sensitive humidity 
+                                 df['PA'].values,
+                                 df['RH'].values),
+              'airpres' : df['PA'].values * 100, #Pa
+              'windspd' : df['WS'].values} # m/s
+    
+    #expand to cover all HRUs (memory efficient way)
+    keys = list(inputf.keys())
+    for i in tqdm(range(len(keys)),ncols=100,desc='prepping'):
+        key = keys[i] 
+        tmp = np.zeros((len(times),len(hru)),order='F')
+        for j in range(len(hru)):
+            tmp[:,j] = inputf[key]
+        data[key] = (('time','hru'),tmp)
     
     weather = xr.Dataset(data,coords=coords) # xarray dataset 
     weather.assign_attrs({'Author':os.getlogin()})
@@ -278,7 +270,7 @@ def initCond2nc(data={}, nhru=1):
                'scalarSnowDepth', 'scalarCanopyIce', 'scalarSfcMeltPond', 
                'scalarAquiferStorage', 'scalarSWE', 'scalarCanopyTemp', 
                'mLayerMatricHead', 'iLayerHeight', 'mLayerTemp', 
-               'mLayerVolFracLiq', 'mLayerVolFracIce', 'mLayerDepth', 
+               'mLayerVolFracLiq', 'mLayerVolFracIce','mLayerDepth', 
                'dt_init', 'nSnow', 'nSoil'] #all the parameters needed by SUMMA 
     
     midTotoC = ['mLayerTemp','mLayerVolFracLiq','mLayerVolFracIce',
@@ -304,35 +296,43 @@ def initCond2nc(data={}, nhru=1):
         data['mLayerDepth'] = layerDepth
     else:
         layerDepth = data['mLayerDepth']
-    
-    if 'iLayerHeight' not in data.keys():
-        tmp = np.asarray([0, 0.025, 0.1, 0.25, 0.5, 1, 1.5, 2.5, 4])#m
-        layerHeight = np.zeros((len(tmp),nhru),dtype=float)
+        
+    if 'iLayerHeight' not in data.keys(): # calculate automatically 
+        nlayers = layerDepth.shape[0]+1
+        tmp = np.zeros(nlayers)
+        r = 0
+        for i in range(nlayers-1):
+            r += layerDepth[:,0][i]
+            tmp[i+1] = r 
+       # print(tmp)
+        layerHeight = np.zeros((nlayers,nhru),dtype=float)
         for i in range(nhru):
             layerHeight[:,i] = tmp
         data['iLayerHeight'] = layerHeight
     else:
         layerHeight = data['iLayerHeight']
+    
+
         
     #setup default values (feel free to edit this)
     defaults = {'scalarCanopyLiq'     :0,
                 'scalarCanairTemp'    :286,
-                'scalarSnowAlbedo'    :0,
+                'scalarSnowAlbedo'    :0.16,
                 'scalarSnowDepth'     :0,
                 'scalarCanopyIce'     :0,
                 'scalarSfcMeltPond'   :0,
-                'scalarAquiferStorage':1,
+                'scalarAquiferStorage':0,
                 'scalarSWE'           :0,
                 'scalarCanopyTemp'    :286,
                 'mLayerMatricHead'    :-1,
                 'iLayerHeight'        :layerHeight,
                 'mLayerTemp'          :273,
-                'mLayerVolFracLiq'    :0.5,
+                'mLayerVolFracLiq'    :0.7,
                 'mLayerVolFracIce'    :0.1,
                 'mLayerDepth'         :layerDepth,
                 'dt_init'             :1800,
-                'nSnow'               :1,
-                'nSoil'               :layerDepth.shape[0]-1}
+                'nSnow'               :0,
+                'nSoil'               :layerHeight.shape[0]}
             
     netc = {}
     for c in columns:
@@ -341,7 +341,7 @@ def initCond2nc(data={}, nhru=1):
         if c in midTotoC:
             dim = ('midToto', 'hru')
             d = 2
-            xdim = layerDepth.shape[0]
+            xdim = layerDepth.shape[0] 
         elif c in midSoilC:
             dim = ('midSoil', 'hru')
             d = 2
@@ -408,3 +408,34 @@ def emptyTrailParam(nhru=1):
     #         'dt_init'             :(('scalarv', 'hru'), val(30*60)),
     #         'nSnow'               :(('scalarv', 'hru'), val(1,dtype=int)),
     #         'nSoil'               :(('scalarv', 'hru'), val(7,dtype=int))}
+    
+#%% uk landcover to usgs table lookup 
+# lookup = {'Deciduous woodland':(1,11)}
+lookup = {'1':11,#Deciduous woodland
+          '2':13,#Coniferous woodland
+          '3':4,
+          '4':5,
+          '5':7,
+          '6':8,
+          '7':9,
+          '8':17,
+          '9':8,
+          '10':9,
+          '11':17,
+          '12':19,
+          '13':16,
+          '14':16,
+          '15':19,
+          '16':19,
+          '17':23,
+          '18':23,
+          '19':18,
+          '20':1,
+          '21':1}
+
+def UKCEH2NOAH(coverId):
+    out = [0]*len(coverId)
+    for i in range(len(coverId)):
+        li = str(int(coverId[i]))
+        out[i] = lookup[li]
+    return out 
